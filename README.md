@@ -56,10 +56,10 @@ cd services/crypto-service && cargo run
 
 ## Security Model
 
-1. **Client-side encryption** — Plaintext never leaves the browser unencrypted; the storage service only sees ciphertext chunks.
-2. **Authenticated key exchange** — Users prove identity to the crypto service; file keys are wrapped per recipient (see `crypto-service` docs).
-3. **Service boundary ACLs** — Every storage operation carries a capability token validated by the crypto service.
-4. **Tenant isolation** — Kubernetes assigns each user a dedicated namespace with a `NetworkPolicy` denying cross-namespace traffic.
+1. **Client-side encryption:** Plaintext never leaves the browser unencrypted; the storage service only sees ciphertext chunks.
+2. **Authenticated key exchange:** Users prove identity to the crypto service; file keys are wrapped per recipient (see `crypto-service` docs).
+3. **Service boundary ACLs:** Every storage operation carries a capability token validated by the crypto service.
+4. **Tenant isolation:** Kubernetes assigns each user a dedicated namespace with a `NetworkPolicy` denying cross-namespace traffic.
 
 ## Testing
 
