@@ -255,19 +255,18 @@ export default function App() {
       <div className="page__bg" />
       <div className="page__grid" />
 
-      <div className="page__content">
-        <header className="header">
-          <div className="logo">
-            <div className="logo__icon">
-              <LockIcon />
+      <div className={`page__content${session ? "" : " page__content--auth"}`}>
+        {session ? (
+          <header className="header">
+            <div className="logo logo--app">
+              <div className="logo__icon">
+                <LockIcon />
+              </div>
+              <div>
+                <div className="logo__text">SecureShare</div>
+                <div className="logo__tag">Private file sharing</div>
+              </div>
             </div>
-            <div>
-              <div className="logo__text">SecureShare</div>
-              <div className="logo__tag">Private file sharing</div>
-            </div>
-          </div>
-
-          {session && (
             <div className="user-badge">
               <span className="user-badge__name">{session.userId}</span>
               <div className="user-badge__avatar">{initials}</div>
@@ -275,50 +274,41 @@ export default function App() {
                 Sign out
               </button>
             </div>
-          )}
-        </header>
+          </header>
+        ) : null}
 
         {!session ? (
-          <div className="auth-shell">
-          <div className="auth-layout">
-            <section className="hero">
-              <h1 className="hero__title">
-                Share files.<br />
-                <span>Keep them private.</span>
-              </h1>
-              <p className="hero__text">
-                Upload files that get locked before they leave your computer.
-                Only people you allow can download them, and they need your
-                password to unlock the file.
-              </p>
-              <ol className="steps">
-                <li className="step">
-                  <div className="step__num">1</div>
-                  <p className="step__title">Create an account</p>
-                  <p className="step__text">Pick a username and password</p>
-                </li>
-                <li className="step">
-                  <div className="step__num">2</div>
-                  <p className="step__title">Upload a file</p>
-                  <p className="step__text">It gets encrypted automatically</p>
-                </li>
-                <li className="step">
-                  <div className="step__num">3</div>
-                  <p className="step__title">Share with someone</p>
-                  <p className="step__text">Give them access and your password</p>
-                </li>
-              </ol>
-            </section>
+          <div className="auth-portal">
+            <div className="auth-portal__ring" aria-hidden="true" />
+            <div className="auth-portal__ring auth-portal__ring--inner" aria-hidden="true" />
 
-            <div className="card auth-card">
+            <div className="auth-brand">
+              <div className="auth-brand__icon">
+                <LockIcon />
+              </div>
+              <h1 className="auth-brand__name">SecureShare</h1>
+              <p className="auth-brand__tag">Private file sharing</p>
+            </div>
+
+            <div className="auth-panel">
+              <p className="auth-panel__lead">
+                Share files. <span>Keep them private.</span>
+              </p>
+              <p className="auth-panel__sub">
+                Files lock on your device before upload. Only people you allow can
+                download them.
+              </p>
+
               <div className="auth-tabs">
                 <button
+                  type="button"
                   className={authMode === "login" ? "active" : ""}
                   onClick={() => setAuthMode("login")}
                 >
                   Sign in
                 </button>
                 <button
+                  type="button"
                   className={authMode === "register" ? "active" : ""}
                   onClick={() => setAuthMode("register")}
                 >
@@ -357,6 +347,7 @@ export default function App() {
               </div>
 
               <button
+                type="button"
                 className="btn btn--primary btn--full"
                 onClick={handleAuth}
                 disabled={!username || !password || busy}
@@ -365,30 +356,37 @@ export default function App() {
                 {authMode === "login" ? "Sign in" : "Create account"}
               </button>
             </div>
-          </div>
-          <div className="auth-highlights">
-            <div className="highlight">
-              <LockIcon />
-              <div>
-                <strong>Encrypted in your browser</strong>
-                <p>Files are locked before they are uploaded.</p>
+
+            <div className="auth-flow" aria-label="How it works">
+              <div className="auth-flow__track" aria-hidden="true" />
+              <div className="auth-flow__step">
+                <span className="auth-flow__dot">1</span>
+                <span className="auth-flow__label">Create account</span>
+              </div>
+              <div className="auth-flow__step">
+                <span className="auth-flow__dot">2</span>
+                <span className="auth-flow__label">Upload encrypted</span>
+              </div>
+              <div className="auth-flow__step">
+                <span className="auth-flow__dot">3</span>
+                <span className="auth-flow__label">Share access</span>
               </div>
             </div>
-            <div className="highlight">
-              <UploadIcon />
-              <div>
-                <strong>You choose who gets access</strong>
-                <p>Share by username, not public links.</p>
-              </div>
-            </div>
-            <div className="highlight">
-              <FileIcon />
-              <div>
-                <strong>Servers only store scrambled data</strong>
-                <p>Your password is required to open any file.</p>
-              </div>
-            </div>
-          </div>
+
+            <ul className="auth-trust">
+              <li>
+                <LockIcon />
+                Browser-side encryption
+              </li>
+              <li>
+                <UploadIcon />
+                Username-based sharing
+              </li>
+              <li>
+                <FileIcon />
+                Scrambled server storage
+              </li>
+            </ul>
           </div>
         ) : (
           <div className="dashboard">

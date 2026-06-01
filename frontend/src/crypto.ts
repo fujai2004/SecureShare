@@ -16,6 +16,7 @@ function fromBase64(value: string): Uint8Array {
 }
 
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+  const saltBytes = new Uint8Array(salt);
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
     "raw",
@@ -25,7 +26,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 120_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: saltBytes, iterations: 120_000, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
@@ -43,7 +44,7 @@ export async function encryptFile(
   const plaintext = await file.arrayBuffer();
 
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, tagLength: TAG_LENGTH },
+    { name: "AES-GCM", iv: new Uint8Array(iv), tagLength: TAG_LENGTH },
     key,
     plaintext
   );
@@ -66,9 +67,9 @@ export async function decryptFile(
   const key = await deriveKey(password, salt);
 
   return crypto.subtle.decrypt(
-    { name: "AES-GCM", iv, tagLength: TAG_LENGTH },
+    { name: "AES-GCM", iv: new Uint8Array(iv), tagLength: TAG_LENGTH },
     key,
-    ciphertext
+    new Uint8Array(ciphertext)
   );
 }
 
