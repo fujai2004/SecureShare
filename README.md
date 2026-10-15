@@ -60,7 +60,7 @@ See [architecture](docs/architecture.md), [MVP status](docs/mvp-status.md), and 
 
 ## Native development
 
-Use Node.js 22+, a current stable Rust toolchain, CMake 3.20+, and a C++20 compiler. CMake fetches the pinned cpp-httplib release for HTTP parsing. Build and start storage with `STORAGE_DATA_DIR` pointing to a writable directory; the default is /data. Set `JWT_SECRET`, `DATABASE_PATH`, and optionally `STORAGE_SERVICE_URL` before `cargo run` in services/crypto-service. Run `npm run dev` in frontend; it uses http://localhost:8080 unless VITE_CRYPTO_API is set.
+Use Node.js 22+, a current stable Rust toolchain, CMake 3.20+, and a C++20 compiler. CMake fetches the pinned cpp-httplib release for HTTP parsing. Build and start storage with `STORAGE_DATA_DIR` pointing to a writable directory; the default is /data. Set `JWT_SECRET`, `DATABASE_PATH`, and optionally `STORAGE_SERVICE_URL` before `cargo run` in services/crypto-service. Run `npm run dev` in frontend; Vite proxies same-origin /v1 requests to http://localhost:8080. Set VITE_CRYPTO_API only when deliberately using another API origin.
 
 ## Security boundaries
 

@@ -46,6 +46,7 @@ export default function App() {
         password,
       );
       const entries = await api.listFiles(next.token);
+      await vault.verifyIdentity(key, next.publicKey);
       setPrivateKey(key);
       setSession(next);
       setFiles(entries);
@@ -127,6 +128,7 @@ export default function App() {
           </div>
           {session && (
             <button
+              disabled={busy}
               className="btn btn--ghost"
               onClick={() => {
                 setSession(null);
@@ -145,6 +147,7 @@ export default function App() {
         </header>
         {!session ? (
           <form
+            style={{ maxWidth: 560, width: "100%", alignSelf: "center" }}
             className="card"
             onSubmit={(e) => {
               e.preventDefault();

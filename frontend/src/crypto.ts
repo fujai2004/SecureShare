@@ -125,6 +125,27 @@ export async function wrapFileKey(
     await crypto.subtle.wrapKey("raw", key, recipient, "RSA-OAEP"),
   );
 }
+// Check the owner's directory key before encrypting uploads to it.
+export async function verifyIdentity(
+  privateKey: CryptoKey,
+  publicKey: string,
+): Promise<void> {
+  const probe = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  const recovered = await unwrapFileKey(
+    await wrapFileKey(probe, publicKey),
+    privateKey,
+  );
+  if (
+    toBase64(await crypto.subtle.exportKey("raw", probe)) !==
+    toBase64(await crypto.subtle.exportKey("raw", recovered))
+  ) {
+    throw new Error("Account public key does not match your private key");
+  }
+}
 export async function unwrapFileKey(
   wrappedKey: string,
   privateKey: CryptoKey,

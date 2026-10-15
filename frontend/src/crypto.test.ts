@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createIdentity,
   unlockIdentity,
+  verifyIdentity,
   encryptFile,
   decryptFile,
   unwrapFileKey,
@@ -21,6 +22,8 @@ test("recipient decrypts with their own key; strangers, tampering and wrong pass
     "bob private password",
   );
   const file = new Blob([new Uint8Array(512 * 1024).fill(37)]);
+  await verifyIdentity(a, alice.publicKey);
+  await assert.rejects(verifyIdentity(a, bob.publicKey));
   const encrypted = await encryptFile(file, alice.publicKey);
   assert.deepEqual(
     await decryptFile(encrypted.ciphertext, encrypted.wrappedKey, a),

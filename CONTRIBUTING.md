@@ -1,47 +1,10 @@
-# Contributing to SecureShare
-
-Thanks for your interest in this project. SecureShare is a learning and portfolio codebase. Contributions, issues, and feedback are welcome.
-
-## Getting started
-
-1. Fork the repository and clone your fork.
-2. Run the stack locally:
-
-   ```bash
-   docker compose up --build
-   ```
-
-3. Open http://localhost:5173 and verify register, upload, share, and download flows.
-
-## Project layout
-
-| Path | Description |
-|------|-------------|
-| `frontend/` | React client (Web Crypto AES-256-GCM) |
-| `services/crypto-service/` | Rust API: auth, ACLs, file metadata |
-| `services/storage-service/` | C++ multithreaded chunk store |
-| `deploy/k8s/` | Kubernetes manifests |
-| `tests/fault-injection/` | Storage reliability tests |
-
-## Code guidelines
-
-- Match existing style in each language (Rust, C++, TypeScript).
-- Keep changes focused. Avoid unrelated refactors in the same PR.
-- Do not commit secrets, `.env` files, or `node_modules/`.
-- Prefer plain punctuation in user-facing copy (no em dashes).
-
-## Windows notes
-
-Source files should be **UTF-8** (not UTF-16). If Docker builds fail with CMake or Cargo parse errors, re-save affected files as UTF-8.
-
-Native C++ builds target Linux (Docker/WSL). Use Docker Compose on Windows for the easiest path.
-
-## Pull requests
-
-1. Describe what changed and why.
-2. Note how you tested (e.g. `docker compose up --build`, manual UI test).
-3. Link any related issue.
-
-## Production deployments
-
-For Kubernetes, set a strong `JWT_SECRET` and replace default secrets in `deploy/k8s/base/secrets.yaml` before deploying publicly.
+# Contributing
+Read README.md and docs/architecture.md before changing encryption, permission or persistence behavior.
+Copy .env.example to .env, choose a local JWT secret and run docker compose up --build.
+Use npm test and npm run build in frontend; npm run format formats TypeScript.
+Run cargo fmt --check, cargo clippy --all-targets -- -D warnings and cargo test in services/crypto-service.
+Build storage with CMake and run CTest. C++20 native builds work on Windows with Visual Studio 2022 and on Linux; the HTTP library is fetched by CMake.
+Run the full-stack and fault checks from the README when changing service boundaries. Fault tests require a running storage service and fail if it is unavailable.
+Source files are UTF-8. Do not commit secrets, local data, dependencies or build output.
+Keep changes focused. Describe their purpose and the checks actually run.
+Kubernetes secrets are created outside source control; see deploy/k8s/README.md. Deployment and node-failure claims require real cluster validation.

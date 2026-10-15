@@ -13,6 +13,8 @@
 - C++ concurrent immutable writes, restart/index rebuild, path validation and deletion.
 - Large binary HTTP transfer and disconnected writer rejection.
 - Frontend production build, Rust tests and strict Clippy checks.
+- Browser registration and vault opening through the development proxy.
+- Owner public/private key matching; a substituted owner public key is rejected.
 
 ## Prepared, requiring deployment verification
 
