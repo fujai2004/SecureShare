@@ -10,7 +10,7 @@ impl StorageClient {
     pub fn new(base_url: String) -> Self {
         Self {
             base_url,
-            http: Client::new(),
+            http: Client::builder().timeout(std::time::Duration::from_secs(30)).build().expect("HTTP client"),
         }
     }
 
