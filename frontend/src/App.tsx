@@ -1,646 +1,85 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  downloadEncryptedFile,
-  grantAccess,
-  listFiles,
-  login,
-  register,
-  uploadEncryptedFile,
-  type FileMeta,
-  type UserSession,
-} from "./api";
-import { decryptFile, encryptFile } from "./crypto";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** i;
-  return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
-}
-
-function LockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
-function UploadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}
-
+import { useState } from "react";
+import * as api from "./api";
+import * as vault from "./crypto";
 export default function App() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [session, setSession] = useState<UserSession | null>(null);
-  const [encryptionPassword, setEncryptionPassword] = useState("");
-  const [files, setFiles] = useState<FileMeta[]>([]);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-  const [grantFileId, setGrantFileId] = useState("");
-  const [grantUserId, setGrantUserId] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const [pendingDownload, setPendingDownload] = useState<FileMeta | null>(null);
-  const [sharedFilePassword, setSharedFilePassword] = useState("");
-  const uploadingRef = useRef(false);
-
-  useEffect(() => {
-    if (!session) return;
-    listFiles(session.token)
-      .then(setFiles)
-      .catch((e) => setError(String(e)));
-  }, [session]);
-
-  useEffect(() => {
-    if (!status && !error) return;
-    const timer = setTimeout(() => {
-      setStatus("");
-      setError("");
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [status, error]);
-
-  async function handleAuth() {
-    setError("");
-    setStatus("");
-    setBusy(true);
-    try {
-      const next =
-        authMode === "login"
-          ? await login(username, password)
-          : await register(username, password);
-      setSession(next);
-      setEncryptionPassword(password);
-      setStatus(
-        authMode === "login"
-          ? `Signed in as ${next.userId}`
-          : `Account created. Welcome, ${next.userId}!`
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function processUpload(file: File) {
-    if (!session || uploadingRef.current) return;
-    uploadingRef.current = true;
-    setError("");
-    setStatus(`Encrypting and uploading ${file.name}…`);
-    setBusy(true);
-    try {
-      const ciphertext = await encryptFile(file, encryptionPassword);
-      const meta = await uploadEncryptedFile(session.token, file.name, ciphertext);
-      setFiles((prev) => [meta, ...prev]);
-      setStatus(`${file.name} uploaded successfully`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-      uploadingRef.current = false;
-    }
-  }
-
-  async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    await processUpload(file);
-  }
-
-  function handleDrop(event: React.DragEvent) {
-    event.preventDefault();
-    setDragOver(false);
-    const file = event.dataTransfer.files?.[0];
-    if (file) processUpload(file);
-  }
-
-  async function downloadWithPassword(file: FileMeta, filePassword: string) {
-    if (!session) return;
-    setError("");
-    setStatus(`Decrypting ${file.name}…`);
-    setBusy(true);
-    try {
-      const encrypted = await downloadEncryptedFile(session.token, file.id);
-      const plaintext = await decryptFile(encrypted, filePassword);
-      const blob = new Blob([plaintext]);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = file.name;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      setStatus(`${file.name} downloaded`);
-    } catch {
-      setError(
-        file.ownerId === session.userId
-          ? "Could not decrypt this file. Make sure you're using the same password you signed up with."
-          : "Could not decrypt this file. Ask the sender for the password they used when uploading."
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function handleDownload(file: FileMeta) {
-    if (!session) return;
-    const isShared = file.ownerId !== session.userId;
-    if (isShared) {
-      setPendingDownload(file);
-      setSharedFilePassword("");
-      return;
-    }
-    downloadWithPassword(file, encryptionPassword);
-  }
-
-  async function confirmSharedDownload() {
-    if (!pendingDownload || !sharedFilePassword) return;
-    const file = pendingDownload;
-    setPendingDownload(null);
-    await downloadWithPassword(file, sharedFilePassword);
-    setSharedFilePassword("");
-  }
-
-  async function handleGrant() {
-    if (!session || !grantFileId || !grantUserId) return;
-    setError("");
-    setBusy(true);
-    try {
-      await grantAccess(session.token, grantFileId, grantUserId);
-      const fileName = files.find((f) => f.id === grantFileId)?.name ?? "File";
-      setStatus(`Shared "${fileName}" with ${grantUserId}`);
-      setGrantFileId("");
-      setGrantUserId("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyFileId(id: string) {
-    try {
-      await navigator.clipboard.writeText(id);
-      setStatus("File ID copied. Send it to the person you're sharing with.");
-    } catch {
-      setError("Could not copy to clipboard");
-    }
-  }
-
-  function handleSignOut() {
-    setSession(null);
-    setEncryptionPassword("");
-    setFiles([]);
-    setUsername("");
-    setPassword("");
-    setStatus("");
-    setError("");
-    setPendingDownload(null);
-  }
-
-  const initials = session?.userId.slice(0, 2) ?? "";
-  const myFiles = files.filter((f) => f.ownerId === session?.userId);
-
-  return (
-    <div className="page">
-      <div className="page__bg" />
-      <div className="page__grid" />
-
-      <div className={`page__content${session ? "" : " page__content--auth"}`}>
-        {session ? (
-          <header className="header">
-            <div className="logo logo--app">
-              <div className="logo__icon">
-                <LockIcon />
-              </div>
-              <div>
-                <div className="logo__text">SecureShare</div>
-                <div className="logo__tag">Private file sharing</div>
-              </div>
-            </div>
-            <div className="user-badge">
-              <span className="user-badge__name">{session.userId}</span>
-              <div className="user-badge__avatar">{initials}</div>
-              <button className="btn btn--ghost btn--sm" onClick={handleSignOut}>
-                Sign out
-              </button>
-            </div>
-          </header>
-        ) : null}
-
-        {!session ? (
-          <div className="auth-portal">
-            <div className="auth-portal__ring" aria-hidden="true" />
-            <div className="auth-portal__ring auth-portal__ring--inner" aria-hidden="true" />
-
-            <div className="auth-brand">
-              <div className="auth-brand__icon">
-                <LockIcon />
-              </div>
-              <h1 className="auth-brand__name">SecureShare</h1>
-              <p className="auth-brand__tag">Private file sharing</p>
-            </div>
-
-            <div className="auth-panel">
-              <p className="auth-panel__lead">
-                Share files. <span>Keep them private.</span>
-              </p>
-              <p className="auth-panel__sub">
-                Files lock on your device before upload. Only people you allow can
-                download them.
-              </p>
-
-              <div className="auth-tabs">
-                <button
-                  type="button"
-                  className={authMode === "login" ? "active" : ""}
-                  onClick={() => setAuthMode("login")}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  className={authMode === "register" ? "active" : ""}
-                  onClick={() => setAuthMode("register")}
-                >
-                  Create account
-                </button>
-              </div>
-
-              <div className="field">
-                <label htmlFor="username">Username</label>
-                <input
-                  id="username"
-                  type="text"
-                  placeholder="Username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAuth()}
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  placeholder="Password"
-                  autoComplete={authMode === "login" ? "current-password" : "new-password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAuth()}
-                />
-                <p className="field__hint">
-                  This password locks and unlocks your files. If you forget it,
-                  your files cannot be recovered.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                className="btn btn--primary btn--full"
-                onClick={handleAuth}
-                disabled={!username || !password || busy}
-              >
-                {busy && <span className="spinner" />}
-                {authMode === "login" ? "Sign in" : "Create account"}
-              </button>
-            </div>
-
-            <div className="auth-flow" aria-label="How it works">
-              <div className="auth-flow__track" aria-hidden="true" />
-              <div className="auth-flow__step">
-                <span className="auth-flow__dot">1</span>
-                <span className="auth-flow__label">Create account</span>
-              </div>
-              <div className="auth-flow__step">
-                <span className="auth-flow__dot">2</span>
-                <span className="auth-flow__label">Upload encrypted</span>
-              </div>
-              <div className="auth-flow__step">
-                <span className="auth-flow__dot">3</span>
-                <span className="auth-flow__label">Share access</span>
-              </div>
-            </div>
-
-            <ul className="auth-trust">
-              <li>
-                <LockIcon />
-                Browser-side encryption
-              </li>
-              <li>
-                <UploadIcon />
-                Username-based sharing
-              </li>
-              <li>
-                <FileIcon />
-                Scrambled server storage
-              </li>
-            </ul>
-          </div>
-        ) : (
-          <div className="dashboard">
-            <div className="card">
-              <div className="card__header">
-                <div>
-                  <h2 className="card__title">How it works</h2>
-                  <p className="card__desc">Three steps to share a file securely</p>
-                </div>
-              </div>
-              <ol className="steps">
-                <li className="step">
-                  <div className="step__num">1</div>
-                  <p className="step__title">Upload</p>
-                  <p className="step__text">
-                    Pick a file. It is encrypted with your password before uploading.
-                  </p>
-                </li>
-                <li className="step">
-                  <div className="step__num">2</div>
-                  <p className="step__title">Share access</p>
-                  <p className="step__text">
-                    Enter their username below to let them download it
-                  </p>
-                </li>
-                <li className="step">
-                  <div className="step__num">3</div>
-                  <p className="step__title">Send your password</p>
-                  <p className="step__text">
-                    Tell them your password separately (text, call, etc.) so they can unlock the file
-                  </p>
-                </li>
-              </ol>
-            </div>
-
-            <div className="card dashboard__upload">
-              <div className="card__header">
-                <div>
-                  <h2 className="card__title">Upload a file</h2>
-                  <p className="card__desc">
-                    Drag and drop or click to choose a file from your computer
-                  </p>
-                </div>
-              </div>
-
-              <label
-                htmlFor="file-upload"
-                className={`upload-zone${dragOver ? " drag-over" : ""}`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-              >
-                <input
-                  id="file-upload"
-                  className="upload-zone__input"
-                  type="file"
-                  onChange={handleUpload}
-                  disabled={busy}
-                />
-                <div className="upload-zone__icon">
-                  <UploadIcon />
-                </div>
-                <div className="upload-zone__title">Choose a file or drag it here</div>
-                <div className="upload-zone__sub">Any file type works</div>
-                <span className="upload-zone__badge">
-                  <LockIcon />
-                  Encrypted before upload
-                </span>
-              </label>
-            </div>
-
-            <div className="card dashboard__files">
-              <div className="card__header">
-                <div>
-                  <h2 className="card__title">Your files</h2>
-                  <p className="card__desc">
-                    {files.length === 0
-                      ? "Uploaded files show up here"
-                      : `${files.length} file${files.length === 1 ? "" : "s"}`}
-                  </p>
-                </div>
-              </div>
-
-              {files.length === 0 ? (
-                <div className="empty-state">
-                  <FileIcon />
-                  <p>No files yet. Upload one above to get started.</p>
-                </div>
-              ) : (
-                <div className="file-grid">
-                  {files.map((file) => {
-                    const isShared = file.ownerId !== session.userId;
-                    return (
-                      <div className="file-item" key={file.id}>
-                        <div className="file-item__icon">
-                          <FileIcon />
-                        </div>
-                        <div className="file-item__info">
-                          <div className="file-item__name">{file.name}</div>
-                          <div className="file-item__meta-row">
-                            <span className="file-item__meta">
-                              {formatBytes(file.size)}
-                              {isShared && ` · Shared by ${file.ownerId}`}
-                            </span>
-                            {isShared && <span className="shared-badge">Shared with you</span>}
-                            {!isShared && (
-                              <button
-                                type="button"
-                                className="btn btn--ghost btn--copy"
-                                onClick={() => copyFileId(file.id)}
-                              >
-                                Copy file ID
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="file-item__actions">
-                          <button
-                            type="button"
-                            className="btn btn--primary btn--sm"
-                            onClick={() => handleDownload(file)}
-                            disabled={busy}
-                          >
-                            <DownloadIcon />
-                            Download
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="card__header">
-                <div>
-                  <h2 className="card__title">Share a file with someone</h2>
-                  <p className="card__desc">
-                    They must already have a SecureShare account
-                  </p>
-                </div>
-              </div>
-
-              <div className="info-box">
-                <strong>Important:</strong> After sharing, tell the other person your
-                password separately (by text, call, etc.). They need it to open the file.
-              </div>
-
-              {myFiles.length === 0 ? (
-                <p className="field__hint field__hint--flush">
-                  Upload a file first, then you can share it here.
-                </p>
-              ) : (
-                <div className="share-form">
-                  <div className="field">
-                    <label htmlFor="grantFile">Which file?</label>
-                    <select
-                      id="grantFile"
-                      value={grantFileId}
-                      onChange={(e) => setGrantFileId(e.target.value)}
-                    >
-                      <option value="">Select a file…</option>
-                      {myFiles.map((file) => (
-                        <option key={file.id} value={file.id}>
-                          {file.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="grantUser">Their username</label>
-                    <input
-                      id="grantUser"
-                      type="text"
-                      placeholder="Username"
-                      value={grantUserId}
-                      onChange={(e) => setGrantUserId(e.target.value)}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn--primary"
-                    onClick={handleGrant}
-                    disabled={!grantFileId || !grantUserId || busy}
-                  >
-                    Share file
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {pendingDownload && (
-        <div className="modal-backdrop" onClick={() => setPendingDownload(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal__title">Enter the sender&apos;s password</h3>
-            <p className="modal__text">
-              <strong>{pendingDownload.name}</strong> was encrypted by{" "}
-              <strong>{pendingDownload.ownerId}</strong>. Ask them for the password
-              they use on SecureShare, then enter it below.
-            </p>
-            <div className="field">
-              <label htmlFor="sharedPassword">Sender&apos;s password</label>
-              <input
-                id="sharedPassword"
-                type="password"
-                placeholder="Password"
-                value={sharedFilePassword}
-                onChange={(e) => setSharedFilePassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && confirmSharedDownload()}
-                autoFocus
-              />
-            </div>
-            <div className="modal__actions">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => setPendingDownload(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={confirmSharedDownload}
-                disabled={!sharedFilePassword || busy}
-              >
-                Download
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="toast-container">
-        {status && (
-          <div className="toast toast--success">
-            <CheckIcon />
-            <span>{status}</span>
-          </div>
-        )}
-        {error && (
-          <div className="toast toast--error">
-            <AlertIcon />
-            <span>{error}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const [mode,setMode]=useState<"login"|"register">("login");
+  const [username,setUsername]=useState(""); const [password,setPassword]=useState("");
+  const [session,setSession]=useState<api.UserSession|null>(null);
+  const [privateKey,setPrivateKey]=useState<CryptoKey|null>(null);
+  const [files,setFiles]=useState<api.FileMeta[]>([]);
+  const [busy,setBusy]=useState(false); const [error,setError]=useState(""); const [status,setStatus]=useState("");
+  const [fileId,setFileId]=useState(""); const [recipient,setRecipient]=useState("");
+  const [myFingerprint,setMyFingerprint]=useState(""); const [recipientFingerprint,setRecipientFingerprint]=useState("");
+  const [verifiedKey,setVerifiedKey]=useState("");
+  async function run(action:()=>Promise<void>) { if(busy)return; setBusy(true);setError("");setStatus("");try{await action();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);} }
+  async function signIn() { await run(async()=>{
+    if(mode==="register" && password.length<12) throw new Error("Choose a password of at least 12 characters.");
+    const identity=mode==="register"?await vault.createIdentity(password):undefined;
+    const next=await api.authenticate(mode,username,await vault.authPassword(username,password),identity);
+    const key=await vault.unlockIdentity(next.encryptedPrivateKey,password);
+    const entries=await api.listFiles(next.token);
+    setPrivateKey(key);setSession(next);setFiles(entries);setPassword("");
+    setMyFingerprint(await vault.fingerprint(next.publicKey));
+  }); }
+  async function upload(file:File) { await run(async()=>{
+    if(!session)return;
+    if(file.size>25*1024*1024)throw new Error("The MVP supports files up to 25 MiB.");
+    const encrypted=await vault.encryptFile(file,session.publicKey);
+    await api.uploadEncryptedFile(session.token,file.name,encrypted.ciphertext,encrypted.wrappedKey);
+    setFiles(await api.listFiles(session.token));setStatus("File encrypted and uploaded.");
+  }); }
+  async function download(file:api.FileMeta) { await run(async()=>{
+    if(!session||!privateKey)return;
+    const data=await api.downloadEncryptedFile(session.token,file.id);
+    const plaintext=await vault.decryptFile(data,file.wrappedKey,privateKey);
+    const url=URL.createObjectURL(new Blob([plaintext]));const a=document.createElement("a");
+    a.href=url;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    setStatus("File decrypted on your device.");
+  }); }
+  async function checkRecipient() { await run(async()=>{
+    if(!session)return;
+    const key=await api.publicKey(session.token,recipient);
+    setVerifiedKey(key);setRecipientFingerprint(await vault.fingerprint(key));
+  }); }
+  async function share() { await run(async()=>{
+    if(!session||!privateKey||!verifiedKey)return;
+    const file=files.find(f=>f.id===fileId);if(!file)throw new Error("Choose a file.");
+    const current=await api.publicKey(session.token,recipient);
+    if(current!==verifiedKey)throw new Error("Recipient key changed. Verify the fingerprint again.");
+    const key=await vault.unwrapFileKey(file.wrappedKey,privateKey);
+    await api.grantAccess(session.token,fileId,recipient,await vault.wrapFileKey(key,verifiedKey));
+    setStatus("Access granted. The recipient can refresh and download with their own account.");
+  }); }
+  const owned=files.filter(f=>f.ownerId===session?.userId);
+  return <div className="page"><div className="page__bg"/><main className="page__content">
+    <header className="header"><div><h1>SecureShare</h1><p>Encrypted on your device. Shared with people you choose.</p></div>
+      {session&&<button className="btn btn--ghost" onClick={()=>{setSession(null);setPrivateKey(null);setFiles([]);setVerifiedKey("");setRecipientFingerprint("");setPassword("");setError("");setStatus("");}}>Sign out {session.userId}</button>}</header>
+    {!session?<form className="card" onSubmit={e=>{e.preventDefault();void signIn();}}>
+      <h2>{mode==="login"?"Sign in":"Create account"}</h2>
+      <div className="field"><label htmlFor="username">Username</label><input id="username" autoComplete="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_-]+" value={username} onChange={e=>setUsername(e.target.value)}/></div>
+      <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete={mode==="login"?"current-password":"new-password"} required minLength={mode==="register"?12:1} value={password} onChange={e=>setPassword(e.target.value)}/></div>
+      <p className="field__hint">Your password protects your private key. There is no password recovery in this MVP.</p>
+      <button className="btn btn--primary" disabled={busy}>{busy?"Opening your vault…":mode==="login"?"Sign in":"Create account"}</button>{" "}
+      <button className="btn btn--ghost" type="button" disabled={busy} onClick={()=>setMode(mode==="login"?"register":"login")}>{mode==="login"?"Create account":"Back to sign in"}</button>
+    </form>:<div className="dashboard">
+      <section className="card dashboard__upload"><h2>Upload a file</h2><p>Up to 25 MiB. Each file gets its own random encryption key.</p>
+        <label className="upload-zone" htmlFor="file-upload">Choose a file<input id="file-upload" type="file" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value="";if(f)void upload(f);}}/></label></section>
+      <section className="card dashboard__files"><div className="card__header"><h2>Your files</h2><button className="btn btn--ghost" disabled={busy} onClick={()=>void run(async()=>setFiles(await api.listFiles(session.token)))}>Refresh</button></div>
+        {!files.length&&<p>No files yet. Upload a file or ask someone to share one with you.</p>}
+        <div className="file-grid">{files.map(file=><article className="file-item" key={file.id}><div className="file-item__info"><strong>{file.name}</strong><p>{(file.size/1024).toFixed(1)} KiB encrypted · {file.ownerId===session.userId?"Owned by you":"Shared by "+file.ownerId}</p></div>
+          <button className="btn btn--primary" disabled={busy} onClick={()=>void download(file)}>Download</button>
+          {file.ownerId===session.userId&&<button className="btn btn--ghost" disabled={busy} onClick={()=>{if(window.confirm("Delete "+file.name+" and revoke all access?"))void run(async()=>{await api.deleteFile(session.token,file.id);setFiles(await api.listFiles(session.token));});}}>Delete</button>}</article>)}</div></section>
+      <section className="card"><h2>Share or revoke access</h2><p>Recipients use their own account. Verify their key fingerprint with them before sharing.</p>
+        <div className="field"><label htmlFor="share-file">File</label><select id="share-file" value={fileId} onChange={e=>setFileId(e.target.value)}><option value="">Choose an owned file</option>{owned.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
+        <div className="field"><label htmlFor="recipient">Recipient username</label><input id="recipient" value={recipient} onChange={e=>{setRecipient(e.target.value);setVerifiedKey("");setRecipientFingerprint("");}}/></div>
+        <button className="btn btn--ghost" disabled={busy||!recipient} onClick={()=>void checkRecipient()}>Look up recipient key</button>
+        {recipientFingerprint&&<p style={{overflowWrap:"anywhere"}}>Recipient SHA-256 fingerprint: {recipientFingerprint}</p>}
+        <button className="btn btn--primary" disabled={busy||!fileId||!verifiedKey} onClick={()=>void share()}>Fingerprint matches — share file</button>{" "}
+        <button className="btn btn--ghost" disabled={busy||!fileId||!recipient} onClick={()=>void run(async()=>{await api.revokeAccess(session.token,fileId,recipient);setStatus("Access revoked for future downloads. Previously downloaded copies cannot be recalled.");})}>Revoke access</button>
+      </section>
+      <section className="card"><h2>Your key fingerprint</h2><p style={{overflowWrap:"anywhere"}}>{myFingerprint}</p><p>Send this fingerprint to people who want to share with you. Login passwords and private keys stay on your device.</p></section>
+    </div>}
+    <div role="status" aria-live="polite">{busy&&<p>Working…</p>}{status&&<p className="info-box">{status}</p>}</div>
+    {error&&<p role="alert" className="info-box">Could not complete the operation: {error}</p>}
+  </main></div>;
 }

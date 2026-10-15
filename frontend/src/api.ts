@@ -1,101 +1,24 @@
-const CRYPTO_API = import.meta.env.VITE_CRYPTO_API ?? "http://localhost:8080";
-
-export type UserSession = {
-  token: string;
-  userId: string;
-};
-
-export type FileMeta = {
-  id: string;
-  name: string;
-  size: number;
-  ownerId: string;
-};
-
-async function parseError(res: Response): Promise<string> {
-  const text = (await res.text()).trim();
-  switch (res.status) {
-    case 401:
-      return "Wrong username or password.";
-    case 403:
-      return "You don't have permission to do that.";
-    case 404:
-      return text.includes("recipient") || text.includes("user")
-        ? "That user doesn't exist. They need to create an account first."
-        : "File not found. Check the file ID and try again.";
-    case 409:
-      return "That username is already taken.";
-    default:
-      return text || "Something went wrong. Please try again.";
-  }
+const API = import.meta.env.VITE_CRYPTO_API ?? "http://localhost:8080";
+export type UserSession = { token:string; userId:string; publicKey:string; encryptedPrivateKey:string };
+export type FileMeta = { id:string; name:string; size:number; ownerId:string; wrappedKey:string };
+async function request(path:string,token?:string,init:RequestInit={}) {
+  const res = await fetch(API+path,{...init,headers:{...(token ? {Authorization:`Bearer ${token}`} : {}),...init.headers}});
+  if (!res.ok) throw new Error((await res.text()).trim() || `Request failed (${res.status})`);
+  return res;
 }
-
-export async function register(username: string, password: string): Promise<UserSession> {
-  const res = await fetch(`${CRYPTO_API}/v1/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+export async function authenticate(mode:"login"|"register",username:string,password:string,identity?:{publicKey:string;encryptedPrivateKey:string}):Promise<UserSession> {
+  return (await request("/v1/auth/"+mode,undefined,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password,...identity})})).json();
 }
-
-export async function login(username: string, password: string): Promise<UserSession> {
-  const res = await fetch(`${CRYPTO_API}/v1/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+export async function listFiles(token:string):Promise<FileMeta[]> { return (await request("/v1/files",token)).json(); }
+export async function publicKey(token:string,username:string):Promise<string> {
+  return (await (await request("/v1/users/"+encodeURIComponent(username)+"/key",token)).json()).publicKey;
 }
-
-export async function listFiles(token: string): Promise<FileMeta[]> {
-  const res = await fetch(`${CRYPTO_API}/v1/files`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+export async function uploadEncryptedFile(token:string,name:string,ciphertext:ArrayBuffer,wrappedKey:string):Promise<FileMeta> {
+  return (await request("/v1/files",token,{method:"POST",headers:{"Content-Type":"application/octet-stream","X-File-Name":encodeURIComponent(name),"X-Wrapped-Key":wrappedKey},body:ciphertext})).json();
 }
-
-export async function uploadEncryptedFile(
-  token: string,
-  name: string,
-  ciphertext: ArrayBuffer
-): Promise<FileMeta> {
-  const res = await fetch(`${CRYPTO_API}/v1/files`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/octet-stream",
-      "X-File-Name": name,
-    },
-    body: ciphertext,
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+export async function downloadEncryptedFile(token:string,id:string):Promise<ArrayBuffer> { return (await request("/v1/files/"+id,token)).arrayBuffer(); }
+export async function grantAccess(token:string,id:string,recipientUserId:string,wrappedKey:string) {
+  await request("/v1/files/"+id+"/grant",token,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipientUserId,wrappedKey})});
 }
-
-export async function downloadEncryptedFile(token: string, fileId: string): Promise<ArrayBuffer> {
-  const res = await fetch(`${CRYPTO_API}/v1/files/${fileId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.arrayBuffer();
-}
-
-export async function grantAccess(
-  token: string,
-  fileId: string,
-  recipientUserId: string
-): Promise<void> {
-  const res = await fetch(`${CRYPTO_API}/v1/files/${fileId}/grant`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ recipientUserId }),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-}
+export async function revokeAccess(token:string,id:string,username:string) { await request("/v1/files/"+id+"/grants/"+encodeURIComponent(username),token,{method:"DELETE"}); }
+export async function deleteFile(token:string,id:string) { await request("/v1/files/"+id,token,{method:"DELETE"}); }
