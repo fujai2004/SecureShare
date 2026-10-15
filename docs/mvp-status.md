@@ -18,6 +18,8 @@
 
 ## Prepared, requiring deployment verification
 
+The first [GitHub CI run on the MVP](https://github.com/fujai2004/SecureShare/actions/runs/38744427777) passed the frontend and Rust API jobs, but failed storage configuration and the container build. Source inspection and local reproduction found two build issues: cpp-httplib's optional zstd linkage expected a target not provided by some packaged zstd configurations, and the container build attempted to compile test sources absent from its build context. Optional zstd support is now disabled for opaque ciphertext storage; tests use standard BUILD_TESTING gating and are disabled in the runtime image build. The corrected build passes locally both with a simulated packaged-zstd configuration and with a Docker-equivalent source context that excludes tests. Linux/container CI must be rerun to confirm the fix.
+
 - Compose services, same-origin frontend proxy, persistent volumes and full-stack CI.
 - Kubernetes PVCs, single-replica Recreate strategy and explicit network policies.
 - CI includes an actual Compose restart test.
