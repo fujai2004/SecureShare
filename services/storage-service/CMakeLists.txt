@@ -1,20 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
-project(secureshare_storage VERSION 0.1.0 LANGUAGES CXX)
-
+project(secureshare_storage LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-add_executable(storage-service
-    src/main.cpp
-    src/http_server.cpp
-    src/chunk_store.cpp
-)
-
-target_include_directories(storage-service PRIVATE include)
-
-if(MSVC)
-    target_compile_options(storage-service PRIVATE /W4)
-else()
-    target_compile_options(storage-service PRIVATE -Wall -Wextra -Wpedantic)
-    target_link_libraries(storage-service PRIVATE pthread)
-endif()
+include(FetchContent)
+FetchContent_Declare(httplib URL https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.28.0.tar.gz DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+set(HTTPLIB_COMPILE OFF CACHE BOOL "" FORCE)
+set(HTTPLIB_USE_OPENSSL_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+set(HTTPLIB_USE_ZLIB_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+set(HTTPLIB_USE_BROTLI_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(httplib)
+find_package(Threads REQUIRED)
+add_library(chunk_store src/chunk_store.cpp)
+target_include_directories(chunk_store PUBLIC include)
+add_executable(storage-service src/main.cpp src/http_server.cpp)
+target_link_libraries(storage-service PRIVATE chunk_store httplib::httplib Threads::Threads)
+enable_testing()
+add_executable(chunk-store-test tests/chunk_store_test.cpp)
+target_link_libraries(chunk-store-test PRIVATE chunk_store Threads::Threads)
+add_test(NAME chunk-store COMMAND chunk-store-test)

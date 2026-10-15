@@ -1,96 +1,28 @@
 #include "http_server.hpp"
-
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#include <cstring>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <vector>
-
+#include "httplib.h"
+#include <stdexcept>
 namespace secureshare {
-
-namespace {
-
-void handle_client(int client_fd, HttpHandler handler) {
-    std::vector<char> buffer(65536);
-    const ssize_t n = recv(client_fd, buffer.data(), buffer.size() - 1, 0);
-    if (n <= 0) {
-        close(client_fd);
-        return;
-    }
-    buffer[static_cast<std::size_t>(n)] = '\0';
-    std::string request(buffer.data(), static_cast<std::size_t>(n));
-
-    std::istringstream req_stream(request);
-    std::string method;
-    std::string path;
-    std::string version;
-    req_stream >> method >> path >> version;
-
-    std::size_t body_offset = request.find("\r\n\r\n");
-    std::string body;
-    if (body_offset != std::string::npos && body_offset + 4 < request.size()) {
-        body = request.substr(body_offset + 4);
-    }
-
-    const std::string response = handler(method, path, body);
-    send(client_fd, response.data(), response.size(), 0);
-    close(client_fd);
-}
-
-}  // namespace
-
-HttpServer::HttpServer(int port, HttpHandler handler)
-    : port_(port), handler_(std::move(handler)) {}
-
+HttpServer::HttpServer(int port, HttpHandler handler) : port_(port), handler_(std::move(handler)) {}
 void HttpServer::run() {
-    server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd_ < 0) {
-        throw std::runtime_error("socket failed");
-    }
-
-    int opt = 1;
-    setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(static_cast<uint16_t>(port_));
-
-    if (bind(server_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-        throw std::runtime_error("bind failed");
-    }
-    if (listen(server_fd_, 128) < 0) {
-        throw std::runtime_error("listen failed");
-    }
-
-    running_ = true;
-    std::cout << "storage-service listening on port " << port_ << std::endl;
-
-    while (running_) {
-        sockaddr_in client_addr{};
-        socklen_t client_len = sizeof(client_addr);
-        const int client_fd =
-            accept(server_fd_, reinterpret_cast<sockaddr*>(&client_addr), &client_len);
-        if (client_fd < 0) {
-            if (running_) std::cerr << "accept failed\n";
-            continue;
-        }
-        std::thread(handle_client, client_fd, handler_).detach();
-    }
+    httplib::Server server;
+    server.new_task_queue = [] { return new httplib::ThreadPool(8, 128); };
+    server.set_payload_max_length(25 * 1024 * 1024 + 64);
+    server.set_read_timeout(10, 0);
+    server.set_write_timeout(10, 0);
+    auto dispatch = [this](const httplib::Request& req, httplib::Response& res) {
+        // The parser invokes this only after receiving the complete declared body.
+        const auto raw = handler_(req.method, req.path, req.body);
+        const auto split = raw.find("\r\n\r\n");
+        const auto first_space = raw.find(' ');
+        res.status = std::stoi(raw.substr(first_space + 1, 3));
+        res.set_content(raw.substr(split + 4), req.method == "GET" && req.path != "/health"
+            ? "application/octet-stream" : "text/plain");
+    };
+    server.Get("/health", dispatch);
+    server.Get(R"(/v1/chunks/.*)", dispatch);
+    server.Put(R"(/v1/chunks/.*)", dispatch);
+    server.Delete(R"(/v1/chunks/.*)", dispatch);
+    if (!server.listen("0.0.0.0", port_)) throw std::runtime_error("storage listen failed");
 }
-
-void HttpServer::stop() {
-    running_ = false;
-    if (server_fd_ >= 0) {
-        close(server_fd_);
-        server_fd_ = -1;
-    }
+void HttpServer::stop() {}
 }
-
-}  // namespace secureshare
