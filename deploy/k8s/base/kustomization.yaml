@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: secureshare-system
 resources:
   - namespace.yaml
-  - secrets.yaml
   - storage-service.yaml
   - crypto-service.yaml
   - frontend.yaml

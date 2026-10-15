@@ -1,26 +1,14 @@
 #pragma once
-
 #include <functional>
 #include <string>
-
 namespace secureshare {
-
-using HttpHandler = std::function<std::string(const std::string& method,
-                                              const std::string& path,
-                                              const std::string& body)>;
-
+using HttpHandler = std::function<std::string(const std::string&,const std::string&,const std::string&)>;
 class HttpServer {
 public:
     HttpServer(int port, HttpHandler handler);
-
     void run();
-    void stop();
-
 private:
     int port_;
     HttpHandler handler_;
-    bool running_{false};
-    int server_fd_{-1};
 };
-
-}  // namespace secureshare
+}

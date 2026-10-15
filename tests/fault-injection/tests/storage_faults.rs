@@ -1,89 +1,33 @@
-//! Fault injection harness for SecureShare storage.
-//!
-//! Simulates concurrent writers and a mid-write "node failure" by aborting one
-//! client while another completes. Asserts the successful write remains readable.
-
-use std::sync::Arc;
-use std::time::Duration;
-
-use tokio::sync::Barrier;
+use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
-
-const STORAGE_URL: &str = "http://127.0.0.1:9000";
-
-async fn put_chunk(client: &reqwest::Client, id: &str, body: &[u8]) -> reqwest::Result<()> {
-    client
-        .put(format!("{STORAGE_URL}/v1/chunks/{id}"))
-        .body(body.to_vec())
-        .send()
-        .await?
-        .error_for_status()?;
-    Ok(())
-}
-
-async fn get_chunk(client: &reqwest::Client, id: &str) -> reqwest::Result<Vec<u8>> {
-    Ok(client
-        .get(format!("{STORAGE_URL}/v1/chunks/{id}"))
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?
-        .to_vec())
-}
-
+fn base() -> String { std::env::var("STORAGE_URL").unwrap_or_else(|_| "http://127.0.0.1:9000".into()) }
 #[tokio::test]
-async fn concurrent_writes_do_not_lose_committed_data() {
+async fn concurrent_unique_uploads_round_trip_large_binary_payloads() {
     let client = reqwest::Client::new();
-    if client.get(format!("{STORAGE_URL}/health")).send().await.is_err() {
-        eprintln!("skip: storage-service not running on {STORAGE_URL}");
-        return;
+    client.get(format!("{}/health",base())).send().await.expect("start storage-service before these tests").error_for_status().unwrap();
+    let mut tasks=Vec::new();
+    for n in 0..16u8 {
+        let c=client.clone();
+        tasks.push(tokio::spawn(async move {
+            let url=format!("{}/v1/chunks/{}",base(),Uuid::new_v4());
+            let data=vec![n;256*1024];
+            assert_eq!(c.put(&url).body(data.clone()).send().await.unwrap().status(),201);
+            assert_eq!(c.get(&url).send().await.unwrap().bytes().await.unwrap().as_ref(),&data);
+            assert_eq!(c.put(&url).body("replacement").send().await.unwrap().status(),409);
+            assert_eq!(c.get(&url).send().await.unwrap().bytes().await.unwrap().as_ref(),&data);
+            c.delete(url).send().await.unwrap().error_for_status().unwrap();
+        }));
     }
-
-    let id = Uuid::new_v4().to_string();
-    let winner = b"committed-payload";
-    let loser = b"aborted-payload";
-
-    let barrier = Arc::new(Barrier::new(2));
-    let b1 = barrier.clone();
-    let b2 = barrier.clone();
-    let id1 = id.clone();
-    let id2 = id.clone();
-    let client1 = client.clone();
-    let client2 = client.clone();
-
-    let t1 = tokio::spawn(async move {
-        b1.wait().await;
-        put_chunk(&client1, &id1, winner).await.unwrap();
-    });
-
-    let t2 = tokio::spawn(async move {
-        b2.wait().await;
-        let _ = put_chunk(&client2, &id2, loser).await;
-        // Simulate node failure: abort before confirming read path
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        panic!("simulated node failure");
-    });
-
-    let _ = t2.await;
-    t1.await.unwrap();
-
-    let stored = get_chunk(&client, &id).await.expect("read committed chunk");
-    assert_eq!(stored, winner, "zero data loss for committed write");
+    for task in tasks {task.await.unwrap();}
 }
-
 #[tokio::test]
-async fn read_missing_chunk_returns_not_found() {
-    let client = reqwest::Client::new();
-    if client.get(format!("{STORAGE_URL}/health")).send().await.is_err() {
-        eprintln!("skip: storage-service not running");
-        return;
-    }
-
-    let res = client
-        .get(format!("{STORAGE_URL}/v1/chunks/{}", Uuid::new_v4()))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(res.status(), reqwest::StatusCode::NOT_FOUND);
+async fn disconnected_writer_never_commits_partial_chunk() {
+    let url=reqwest::Url::parse(&base()).unwrap();
+    let id=Uuid::new_v4();
+    let mut stream=tokio::net::TcpStream::connect((url.host_str().unwrap(),url.port_or_known_default().unwrap())).await.unwrap();
+    stream.write_all(format!("PUT /v1/chunks/{id} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048576\r\n\r\npartial").as_bytes()).await.unwrap();
+    stream.shutdown().await.unwrap();
+    drop(stream);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert_eq!(reqwest::get(format!("{}/v1/chunks/{id}",base())).await.unwrap().status(),404);
 }

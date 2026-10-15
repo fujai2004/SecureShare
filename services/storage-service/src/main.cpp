@@ -2,6 +2,8 @@
 #include "http_server.hpp"
 
 #include <cstdlib>
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -43,12 +45,13 @@ int main() {
             }
 
             const std::string id = chunk_id_from_path(path);
-            if (id.empty()) {
+            if (id.empty() || id.size() > 128 || !std::all_of(id.begin(), id.end(), [](unsigned char c) { return std::isalnum(c) || c == '-'; })) {
                 return http_response(404, "Not Found", "not found");
             }
 
             if (method == "PUT") {
                 if (!store.put(id, body)) {
+                    if (store.get(id)) return http_response(409, "Conflict", "chunk already exists");
                     return http_response(500, "Internal Server Error", "write failed");
                 }
                 return http_response(201, "Created", "");

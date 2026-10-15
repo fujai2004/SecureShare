@@ -1,50 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: storage-service
-  namespace: secureshare-system
-  labels:
-    app: storage-service
+metadata: {name: storage-service, namespace: secureshare-system}
 spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: storage-service
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: storage-service}}
   template:
-    metadata:
-      labels:
-        app: storage-service
+    metadata: {labels: {app: storage-service}}
     spec:
       containers:
         - name: storage-service
           image: secureshare/storage-service:latest
-          ports:
-            - containerPort: 9000
-          env:
-            - name: STORAGE_DATA_DIR
-              value: /data
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 9000
-            initialDelaySeconds: 2
-            periodSeconds: 5
-      volumes:
-        - name: data
-          emptyDir: {}
-
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 9000}]
+          env: [{name: STORAGE_DATA_DIR, value: /data}]
+          volumeMounts: [{name: data, mountPath: /data}]
+          readinessProbe: {httpGet: {path: /health, port: 9000}, initialDelaySeconds: 2}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: ciphertext}}]
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: storage-service
-  namespace: secureshare-system
+metadata: {name: storage-service, namespace: secureshare-system}
 spec:
-  selector:
-    app: storage-service
-  ports:
-    - port: 9000
-      targetPort: 9000
+  selector: {app: storage-service}
+  ports: [{port: 9000, targetPort: 9000}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: ciphertext, namespace: secureshare-system}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 5Gi}}

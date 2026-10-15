@@ -25,7 +25,11 @@ pub fn hash_password(password: &str) -> String {
 pub fn verify_password(password: &str, hash: &str) -> bool {
     PasswordHash::new(hash)
         .ok()
-        .and_then(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).ok())
+        .and_then(|parsed| {
+            Argon2::default()
+                .verify_password(password.as_bytes(), &parsed)
+                .ok()
+        })
         .is_some()
 }
 

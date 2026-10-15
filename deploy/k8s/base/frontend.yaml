@@ -1,39 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: frontend
-  namespace: secureshare-system
-  labels:
-    app: frontend
+metadata: {name: frontend, namespace: secureshare-system}
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: frontend
+  selector: {matchLabels: {app: frontend}}
   template:
-    metadata:
-      labels:
-        app: frontend
+    metadata: {labels: {app: frontend}}
     spec:
       containers:
         - name: frontend
           image: secureshare/frontend:latest
-          ports:
-            - containerPort: 5173
-          env:
-            - name: VITE_CRYPTO_API
-              value: http://crypto-service.secureshare-system.svc.cluster.local:8080
-
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 5173}]
+          readinessProbe: {httpGet: {path: /health, port: 5173}, initialDelaySeconds: 2}
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: frontend
-  namespace: secureshare-system
+metadata: {name: frontend, namespace: secureshare-system}
 spec:
-  type: LoadBalancer
-  selector:
-    app: frontend
-  ports:
-    - port: 80
-      targetPort: 5173
+  selector: {app: frontend}
+  ports: [{port: 80, targetPort: 5173}]

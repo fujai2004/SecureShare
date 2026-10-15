@@ -1,20 +1,47 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
-metadata:
-  name: deny-cross-tenant
-  namespace: secureshare-system
+metadata: {name: default-deny, namespace: secureshare-system}
 spec:
   podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: frontend-access, namespace: secureshare-system}
+spec:
+  podSelector: {matchLabels: {app: frontend}}
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: secureshare-system
+    - ports: [{protocol: TCP, port: 5173}]
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: secureshare-system
+    - to: [{podSelector: {matchLabels: {app: crypto-service}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: api-access, namespace: secureshare-system}
+spec:
+  podSelector: {matchLabels: {app: crypto-service}}
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: 8080}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: storage-service}}}]
+      ports: [{protocol: TCP, port: 9000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: storage-access, namespace: secureshare-system}
+spec:
+  podSelector: {matchLabels: {app: storage-service}}
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: crypto-service}}}]
+      ports: [{protocol: TCP, port: 9000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: dns, namespace: secureshare-system}
+spec:
+  podSelector: {}
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

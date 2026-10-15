@@ -1,22 +1,7 @@
-# storage-service (C++)
-
-Multithreaded HTTP chunk store used by the Rust crypto control plane. Each accepted connection is handled on a detached worker thread.
-
-## Build (Linux / WSL / Docker)
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-STORAGE_DATA_DIR=./data ./build/storage-service
-```
-
-## API
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Liveness |
-| PUT | `/v1/chunks/{id}` | Store ciphertext chunk |
-| GET | `/v1/chunks/{id}` | Fetch chunk |
-| DELETE | `/v1/chunks/{id}` | Remove chunk |
-
-The service stores opaque bytes only; encryption happens in the browser.
+# Ciphertext storage
+C++20 immutable chunk storage with a bounded HTTP worker pool.
+Build with CMake; run storage-service with STORAGE_DATA_DIR (default /data) and STORAGE_PORT (default 9000).
+PUT /v1/chunks/:id creates a chunk; existing IDs return 409. GET reads it; DELETE removes it.
+IDs contain up to 128 letters/digits/hyphens. Payloads are bounded to 25 MiB plus encryption overhead.
+This service has no user authentication: expose it only to the Rust API on a private network.
+Run CTest and the root tests/storage-smoke.mjs harness against the running service.

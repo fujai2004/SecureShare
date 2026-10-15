@@ -1,11 +1,15 @@
-use std::sync::{Arc, Mutex};
-use rusqlite::{Connection, params};
 use crate::storage_client::StorageClient;
+use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileMeta {
-    pub id: String, pub name: String, pub size: usize, pub owner_id: String, pub wrapped_key: String,
+    pub id: String,
+    pub name: String,
+    pub size: usize,
+    pub owner_id: String,
+    pub wrapped_key: String,
 }
 
 #[derive(Clone)]
@@ -32,7 +36,11 @@ impl AppState {
                 wrapped_key TEXT NOT NULL, PRIMARY KEY(file_id,user_id));
             CREATE INDEX IF NOT EXISTS grants_user ON grants(user_id);
         ").expect("initialize metadata schema");
-        Self { jwt_secret, db: Arc::new(Mutex::new(db)), storage: StorageClient::new(storage_url) }
+        Self {
+            jwt_secret,
+            db: Arc::new(Mutex::new(db)),
+            storage: StorageClient::new(storage_url),
+        }
     }
     pub fn file(&self, id: &str, user: &str) -> rusqlite::Result<FileMeta> {
         self.db.lock().unwrap().query_row(
@@ -41,5 +49,11 @@ impl AppState {
     }
 }
 pub fn file_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileMeta> {
-    Ok(FileMeta { id: row.get(0)?, name: row.get(1)?, size: row.get(2)?, owner_id: row.get(3)?, wrapped_key: row.get(4)? })
+    Ok(FileMeta {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        size: row.get(2)?,
+        owner_id: row.get(3)?,
+        wrapped_key: row.get(4)?,
+    })
 }

@@ -64,10 +64,26 @@ body {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 55% 45% at 50% 35%, rgba(249, 115, 22, 0.2), transparent),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(249, 115, 22, 0.12), transparent),
-    radial-gradient(ellipse 60% 50% at 90% 10%, rgba(251, 191, 36, 0.08), transparent),
-    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(234, 88, 12, 0.08), transparent),
+    radial-gradient(
+      ellipse 55% 45% at 50% 35%,
+      rgba(249, 115, 22, 0.2),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 80% 60% at 10% -10%,
+      rgba(249, 115, 22, 0.12),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 90% 10%,
+      rgba(251, 191, 36, 0.08),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 50% 100%,
+      rgba(234, 88, 12, 0.08),
+      transparent
+    ),
     var(--bg);
 }
 
@@ -251,7 +267,11 @@ body {
   width: min(380px, 75vw);
   height: min(380px, 75vw);
   border-color: rgba(251, 191, 36, 0.1);
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.08) 0%, transparent 65%);
+  background: radial-gradient(
+    circle,
+    rgba(249, 115, 22, 0.08) 0%,
+    transparent 65%
+  );
 }
 
 .auth-brand {
@@ -356,7 +376,12 @@ body {
   left: 12%;
   right: 12%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.35), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(249, 115, 22, 0.35),
+    transparent
+  );
   z-index: 0;
 }
 
@@ -463,7 +488,9 @@ body {
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .auth-tabs button.active {
@@ -498,7 +525,9 @@ body {
   color: var(--text);
   font-family: inherit;
   font-size: 0.9375rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .field input:focus,
@@ -536,7 +565,10 @@ body {
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.1s,
+    box-shadow 0.15s;
 }
 
 .btn:active:not(:disabled) {
@@ -622,7 +654,9 @@ body {
   border-radius: var(--radius-sm);
   background: rgba(249, 115, 22, 0.04);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   text-align: center;
 }
 
@@ -701,7 +735,9 @@ body {
   background: var(--surface-solid);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .file-item:hover {

@@ -24,5 +24,4 @@ void HttpServer::run() {
     server.Delete(R"(/v1/chunks/.*)", dispatch);
     if (!server.listen("0.0.0.0", port_)) throw std::runtime_error("storage listen failed");
 }
-void HttpServer::stop() {}
 }

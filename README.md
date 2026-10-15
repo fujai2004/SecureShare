@@ -1,187 +1,73 @@
 # SecureShare
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-f97316.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
-[![React](https://img.shields.io/badge/Frontend-React_18-61DAFB?logo=react&logoColor=black)](frontend/)
-[![Rust](https://img.shields.io/badge/API-Rust_Axum-dea584?logo=rust)](services/crypto-service/)
-[![C++](https://img.shields.io/badge/Storage-C%2B%2B20-00599C?logo=cplusplus)](services/storage-service/)
+A portfolio MVP for encrypted file sharing across a React client, Rust API, and multithreaded C++ storage service.
 
-**SecureShare** is an end-to-end encrypted file sharing app. Files are encrypted in your browser before upload. The server only stores scrambled data. You control who can download each file.
+Files are encrypted in the browser with a new AES-256-GCM key for each upload. That key is wrapped with RSA-OAEP separately for the owner and each recipient. A recipient signs in with their own account to decrypt; nobody needs to disclose their login password.
 
-**Repository:** [github.com/fujai2004/SecureShare](https://github.com/fujai2004/SecureShare)
+## Run locally
 
----
+Install Docker Desktop and Node.js 22 for the test tools.
 
-## Features
-
-- **Client-side encryption** using AES-256-GCM (Web Crypto API)
-- **User accounts** with JWT authentication (Argon2 password hashing)
-- **Per-file access control** share with other users by username
-- **Multithreaded storage service** (C++) for encrypted chunk storage
-- **Rust control plane** for auth, ACLs, and storage orchestration
-- **Kubernetes manifests** with per-tenant namespace templates
-- **Fault injection tests** for storage reliability
-
----
-
-## How it works
-
-```mermaid
-flowchart TB
-  subgraph browser [Your browser]
-    UI[React UI]
-    ENC[Encrypt / decrypt]
-  end
-
-  subgraph rust [crypto-service]
-    AUTH[Auth + JWT]
-    ACL[Access control]
-  end
-
-  subgraph cpp [storage-service]
-    STORE[Chunk store]
-  end
-
-  UI --> ENC
-  ENC -->|ciphertext only| AUTH
-  AUTH --> ACL
-  AUTH --> STORE
+```sh
+cp .env.example .env
+# Replace JWT_SECRET in .env with a random value of at least 32 characters.
+docker compose up --build -d
 ```
 
-| Layer | Tech | Role |
-|-------|------|------|
-| `frontend/` | React, TypeScript, Vite | UI, encrypt/decrypt in browser |
-| `services/crypto-service/` | Rust, Axum | Login, file metadata, ACL grants |
-| `services/storage-service/` | C++20 | Store and serve encrypted chunks |
-| `deploy/k8s/` | Kubernetes | Deploy services, tenant isolation |
+Open http://localhost:5173. Create an account with a 3-32 character username and a password of at least 12 characters. Upload a file up to 25 MiB. Create a second account in a private browser window. In the owner's window, choose the file, enter the recipient's username, and look up their key. Compare the fingerprint with the recipient's own displayed fingerprint over another channel, then share. The recipient can refresh and download.
 
----
+The UI also supports revocation and deletion. Revocation prevents future server downloads; it cannot erase copies or keys someone already downloaded.
 
-## Quick start
+The frontend serves built assets through Nginx and proxies API requests on the same origin. The Rust API is also available locally on port 8080. Storage has no host port: only the API should access it.
 
-### Prerequisites
+## What persists
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended)
+SQLite stores password hashes, encrypted private-key vaults, metadata, and per-recipient wrapped keys. A named volume stores that database; another holds ciphertext chunks. Restarting services preserves accounts, permissions, and files. `docker compose down -v` intentionally removes that state.
 
-Optional for native development:
+Old scaffold uploads are incompatible with the versioned SS01 encryption format. They did not have persistent metadata or transferable file keys; re-upload demo files using fresh accounts.
 
-- Node.js 20+
-- Rust 1.85+
-- CMake 3.20+ and a C++20 compiler (Linux/WSL for storage service)
+## Validation
 
-### Run with Docker
-
-```bash
-git clone https://github.com/fujai2004/SecureShare.git
-cd SecureShare
-docker compose up --build
+```sh
+cd frontend
+npm ci
+npm test
+npm run build
+npm run test:e2e
+# To include actual Compose service restarts:
+COMPOSE_RESTART=1 npm run test:e2e
 ```
 
-| Service | URL |
-|---------|-----|
-| **Web app** | http://localhost:5173 |
-| Crypto API | http://localhost:8080/health |
-| Storage API | http://localhost:9000/health |
+PowerShell: `$env:COMPOSE_RESTART='1'; npm run test:e2e`.
 
-### Try the app
-
-1. Open http://localhost:5173 and **Create account**
-2. **Upload** a file (encrypted before it leaves your browser)
-3. **Share** with another user: create a second account in an incognito window, then grant access by username
-4. Tell the recipient your **password** separately so they can decrypt the file
-
-> **Important:** Your account password is also the encryption key. If you forget it, encrypted files cannot be recovered.
-
----
-
-## Project structure
-
-```
-SecureShare/
-├── frontend/                 # React web app
-├── services/
-│   ├── crypto-service/       # Rust API (auth, ACL, uploads)
-│   └── storage-service/      # C++ chunk store
-├── deploy/k8s/               # Kubernetes base + tenant templates
-├── tests/fault-injection/    # Reliability tests
-└── docker-compose.yml        # Local full stack
+```sh
+cargo test --locked --manifest-path services/crypto-service/Cargo.toml
+cargo clippy --locked --manifest-path services/crypto-service/Cargo.toml --all-targets -- -D warnings
+cmake -S services/storage-service -B storage-build -DCMAKE_BUILD_TYPE=Release
+cmake --build storage-build
+ctest --test-dir storage-build --output-on-failure
 ```
 
----
-
-## Development
-
-### Rebuild after changes
-
-```bash
-docker compose up --build
+With a native storage process listening on localhost:9000:
+```sh
+node tests/storage-smoke.mjs
+cargo test --manifest-path tests/fault-injection/Cargo.toml
 ```
 
-Frontend only:
+Tests cover real browser cryptographic primitives, wrong keys/passwords, tampering, API access control, persistent metadata, failed uploads, concurrent storage, incomplete HTTP bodies, and a full cross-account flow with service restarts. The fault harness fails if storage is unavailable; it never silently skips.
 
-```bash
-docker compose up --build frontend
-```
+See [architecture](docs/architecture.md), [MVP status](docs/mvp-status.md), and [Kubernetes instructions](deploy/k8s/README.md).
 
-### Native frontend (hot reload)
+## Native development
 
-```bash
-docker compose up storage-service crypto-service
-cd frontend && npm install && npm run dev
-```
+Use Node.js 22+, a current stable Rust toolchain, CMake 3.20+, and a C++20 compiler. CMake fetches the pinned cpp-httplib release for HTTP parsing. Build and start storage with `STORAGE_DATA_DIR` pointing to a writable directory; the default is /data. Set `JWT_SECRET`, `DATABASE_PATH`, and optionally `STORAGE_SERVICE_URL` before `cargo run` in services/crypto-service. Run `npm run dev` in frontend; it uses http://localhost:8080 unless VITE_CRYPTO_API is set.
 
-### Run tests
+## Security boundaries
 
-```bash
-# Storage fault injection (storage-service must be running)
-cd tests/fault-injection
-cargo test
-```
+Passwords and unwrapped private keys stay in browser memory. Authentication uses a separate, domain-separated PBKDF2-derived secret, which the API hashes with Argon2. The private-key vault uses AES-GCM and a random salt. Public keys come from an authenticated directory; fingerprint comparison detects substitution only when users actually compare them through a trusted channel.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more development notes.
+The API still sees filenames, sizes, account names, and sharing relationships. It cannot cryptographically prevent a recipient from resharing plaintext. There is no password reset, key rotation, forward secrecy, malware scanning, global disk quota, or rate limit on account creation. HTTPS is required outside localhost; the origin serving the application must be trusted. This is a learning MVP, not an audited security product.
 
----
+Storage is an unauthenticated internal service. Network isolation is part of its access boundary. See the Kubernetes manifests for explicit API-to-storage policy.
 
-## Deploy to Kubernetes
-
-```bash
-kubectl apply -k deploy/k8s/base
-```
-
-Per-user tenant namespaces: [deploy/k8s/README.md](deploy/k8s/README.md)
-
-Set a strong `JWT_SECRET` in production (see `deploy/k8s/base/secrets.yaml`).
-
----
-
-## Security model
-
-1. **Client-side encryption:** Plaintext never leaves the browser unencrypted.
-2. **ACL at the API:** Only authorized users can list or download a file.
-3. **Opaque storage:** The C++ service stores ciphertext chunks only.
-4. **Tenant isolation (K8s):** Optional per-user namespaces and network policies.
-
-This is a **portfolio / learning project**, not a production-hardened security product. Do not use it for highly sensitive data without a professional security review.
-
----
-
-## Tech stack
-
-| Area | Technologies |
-|------|----------------|
-| Frontend | React 18, TypeScript, Vite |
-| API | Rust, Axum, JWT, Argon2 |
-| Storage | C++20, CMake, pthreads |
-| Ops | Docker Compose, Kubernetes |
-
----
-
-## License
-
-MIT License. See [LICENSE](LICENSE).
-
----
-
-## Author
-
-**[fujai2004](https://github.com/fujai2004)** on GitHub
+MIT license.
